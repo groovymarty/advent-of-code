@@ -21,5 +21,7 @@ with open('input.txt') as f:
             elif curcal >= maxcal3:
                 # new third greatest, just save it
                 maxcal3 = curcal
+            else:
+                pass
             curcal = 0
 print(maxcal + maxcal2 + maxcal3)

@@ -36,7 +36,7 @@ with open('input.txt') as f:
         move_to = int(mr.group(3))
         for n in range(0, move_n):
             if len(stacks[move_from-1]) == 0:
-                print(f"error, stack {move_from} is empty for move: {move}")
+                print(f"error, stack {move_from} is empty for move: {line}")
                 break
             letter = stacks[move_from-1].pop()
             stacks[move_to-1].append(letter)
