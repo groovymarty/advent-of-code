@@ -27,7 +27,7 @@ with open('input.txt') as f:
                 # helps to draw a picture on paper, think out loud, and/or use test cases
                 # we have a big test case with the input.txt file, proving the code here is correct
                 n = j
-        # if we found four distinct chars in a row, break loop
+        # if we found fourteen distinct chars in a row, break loop
         if n == 14:
             break
 # i is index of last char processed, since index starts at 0 we have to add 1 to get correct result
