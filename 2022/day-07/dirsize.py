@@ -92,6 +92,8 @@ def process_command(command, response):
                 curdir.add_file(file)
             else:
                 print(f"command errorZ: '{command}': unrecognized response line: {line}")
+    else:
+        print(f"unrecognized command: {command}")
 
 
 with open('input.txt') as f:
