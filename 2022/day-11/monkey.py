@@ -44,17 +44,18 @@ class Monkey:
 # array of monkeys
 monkeys = []
 
-# iterator for input lines, used by parsing functions
-lines_iter = None
-
-# one-line buffer for parsing functions
-line_buf = None
-
 
 def print_monkeys(level):
     if level <= log_level:
         for monkey in monkeys:
             print(f"Monkey {monkey.num}: {', '.join([str(item) for item in monkey.items])}")
+
+
+# iterator for input lines, used by parsing functions
+lines_iter = None
+
+# one-line buffer for parsing functions
+line_buf = None
 
 
 # get next line
@@ -172,7 +173,6 @@ with open('input.txt') as f:
         elif line.startswith("Monkey"):
             monkey = parse_monkey(line)
             if monkey.num != len(monkeys):
-                print(monkey.num, len(monkeys))
                 raise ValueError(f"Monkey {monkey.num} out of order")
             monkeys.append(monkey)
             log(TOP, f"Monkey {monkey.num} added")
