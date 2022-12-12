@@ -1,10 +1,12 @@
-import re, sys
+import re
 
+# ***** This file is an aborted attempt at the second half of the challenge.
+# ***** See comments below
 
 TURN = 3   # log messages for each monkey's turn
 ROUND = 2  # log messages for each round
 TOP = 1    # top-level log messages
-log_level = TOP
+log_level = 0
 
 
 def log(level, msg):
@@ -13,14 +15,69 @@ def log(level, msg):
 
 
 # in part one, items are integer values
-# in part two, each item is an array of values computed using modular arithmetic for each
-# monkey's divisibility test.  That is, for each item, do the calculation for each monkey
-# keeping only the remainder (based on that monkey's divisibility test).
+# in part two, we do not compute the item values but instead store the expression that represents the value,
+# but we don't ever actually compute it because the numbers get too big (even with Python's built-in
+# support for arbitrarily large integers, it takes too long to do 10000 rounds on my computer).
+# each item can be:
+# - an integer value
+# - the sum of two items
+# - the product of two items
+# for efficiency let's represent items as:
+# - a Python integer if it's an integer value
+# - otherwise a Python list of length three, first two are the two items, third is the operation as follows:
+# use list instead of tuple because you can reference other lists without copying
+
+ADD = 1
+MULT = 2
+SQUARE = 3  # second item ignored
 
 
 # Item to string for printing
 def item_to_str(item):
-    return "[" + ",".join([str(val) for val in item]) + "]"
+    if log_level == 0:
+        return ""
+    elif isinstance(item, list):
+        if item[2] == SQUARE:
+            return "(" + item_to_str(item[0]) + "**2)"
+        else:
+            return "(" + item_to_str(item[0]) + ("+" if item[2] == ADD else "*") + item_to_str(item[1]) + ")"
+    else:
+        return str(item)
+
+
+# Return remainder of dividing item by n
+# *****
+# ***** This function fails on my system because it overflows the stack.
+# ***** I think it would work if I converted it from recursion to iteration (using an array for the stack),
+# ***** but Jude and I came up with a better idea that I'm going to try first.
+# *****
+def calc_remainder(item, n):
+    if isinstance(item, list):
+        if item[2] == ADD:
+            return (calc_remainder(item[0], n) + calc_remainder(item[1], n)) % n
+        elif item[2] == MULT:
+            return (calc_remainder(item[0], n) * calc_remainder(item[1], n)) % n
+        else:  # SQUARE
+            r = calc_remainder(item[0], n)
+            return (r * r) % n
+    else:
+        return item % n
+
+
+# Construct item from specified ingredients, optimizing if possible
+def optimize(item, val, op):
+    if op != SQUARE and \
+        isinstance(item, list) and \
+        item[2] == op and \
+        not isinstance(item[1], list):
+        if op == ADD:
+            return [item[0], item[1] + val, ADD]
+        elif item[1] * val < sys.maxsize:
+            return [item[0], item[1] * val, MULT]
+        else:
+            return [item, val, MULT]
+    else:
+        return [item, val, op]
 
 
 class Monkey:
@@ -42,7 +99,7 @@ class Monkey:
             log(TURN, f"  Monkey inspects item with worry level of {item_to_str(item)}")
             item = self.operation(item)
             log(TURN, f"  Applying operation changes worry level to {item_to_str(item)}")
-            if item[monkey.num] % monkey.divisor == 0:
+            if calc_remainder(item, monkey.divisor) == 0:
                 log(TURN, f"  Test is true. Item is thrown to monkey {self.throw_to_if_true}")
                 monkeys[self.throw_to_if_true].items.append(item)
             else:
@@ -52,9 +109,6 @@ class Monkey:
 
 # array of monkeys
 monkeys = []
-
-# array of divisors for monkey divisibility tests
-divisors = []
 
 
 def print_monkeys(level):
@@ -110,13 +164,13 @@ def parse_operation(line, monkey):
         raise SyntaxError(f"Bad operation: {line}")
     op = mr.group(1)
     if op == "*" and mr.group(2) == "old":
-        monkey.operation = lambda x: [(previous * previous) % divisor for previous, divisor in zip(x, divisors)]
+        monkey.operation = lambda x: [x, None, SQUARE]
     else:
         val = int(mr.group(2))
         if op == "+":
-            monkey.operation = lambda x: [(previous + val) % divisor for previous, divisor in zip(x, divisors)]
+            monkey.operation = lambda x: optimize(x, val, ADD)
         else:
-            monkey.operation = lambda x: [(previous * val) % divisor for previous, divisor in zip(x, divisors)]
+            monkey.operation = lambda x: optimize(x, val, MULT)
 
 
 def parse_test(line, monkey):
@@ -192,19 +246,11 @@ with open('input.txt') as f:
         else:
             raise SyntaxError(f"Unexpected line: {line}")
 
-
-# get array of divisors for each monkey
-divisors = [monkey.divisor for monkey in monkeys]
-
-# expand each item from integer to array of remainders for each monkey's divisor
-for monkey in monkeys:
-    monkey.items = [[item % divisor for divisor in divisors] for item in monkey.items]
-
 log(TOP, "Initial state:")
 print_monkeys(TOP)
 for round in range(0, 10000):
     if round % 10 == 0:
-        log(TOP, f"Doing round {round}")
+        print(f"Doing round {round}")
     for monkey in monkeys:
         monkey.do_turn()
     log(ROUND, f"After round {round+1}, the monkeys are holding items with these worry levels:")
