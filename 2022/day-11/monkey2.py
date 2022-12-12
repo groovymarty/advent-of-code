@@ -1,10 +1,10 @@
-import re
+import re, sys
 
 
 TURN = 3   # log messages for each monkey's turn
 ROUND = 2  # log messages for each round
 TOP = 1    # top-level log messages
-log_level = TOP
+log_level = 0
 
 
 def log(level, msg):
@@ -22,10 +22,12 @@ def log(level, msg):
 # - the product of two items
 # for efficiency let's represent items as:
 # - a Python integer if it's an integer value
-# - otherwise a Python tuple of length three, first two are the two items, third is the operation as follows:
+# - otherwise a Python list of length three, first two are the two items, third is the operation as follows:
+# use list instead of tuple because you can reference other lists without copying
 
-ADD = True
-MULT = False
+ADD = 1
+MULT = 2
+SQUARE = 3  # second item ignored
 
 
 # Item to string for printing
@@ -33,7 +35,10 @@ def item_to_str(item):
     if log_level == 0:
         return ""
     elif isinstance(item, list):
-        return "(" + item_to_str(item[0]) + ("+" if item[2] == ADD else "*") + item_to_str(item[1]) + ")"
+        if item[2] == SQUARE:
+            return "(" + item_to_str(item[0]) + "**2)"
+        else:
+            return "(" + item_to_str(item[0]) + ("+" if item[2] == ADD else "*") + item_to_str(item[1]) + ")"
     else:
         return str(item)
 
@@ -43,22 +48,27 @@ def calc_remainder(item, n):
     if isinstance(item, list):
         if item[2] == ADD:
             return (calc_remainder(item[0], n) + calc_remainder(item[1], n)) % n
-        else:
+        elif item[2] == MULT:
             return (calc_remainder(item[0], n) * calc_remainder(item[1], n)) % n
+        else:  # SQUARE
+            r = calc_remainder(item[0], n)
+            return (r * r) % n
     else:
         return item % n
 
 
 # Construct item from specified ingredients, optimizing if possible
 def optimize(item, val, op):
-    if isinstance(item, list) and \
+    if op != SQUARE and \
+        isinstance(item, list) and \
         item[2] == op and \
-        not isinstance(item[1], list) and \
-        item[1] < 1000000:
+        not isinstance(item[1], list):
         if op == ADD:
             return [item[0], item[1] + val, ADD]
-        else:
+        elif item[1] * val < sys.maxsize:
             return [item[0], item[1] * val, MULT]
+        else:
+            return [item, val, MULT]
     else:
         return [item, val, op]
 
@@ -147,7 +157,7 @@ def parse_operation(line, monkey):
         raise SyntaxError(f"Bad operation: {line}")
     op = mr.group(1)
     if op == "*" and mr.group(2) == "old":
-        monkey.operation = lambda x: [x, x, MULT]
+        monkey.operation = lambda x: [x, None, SQUARE]
     else:
         val = int(mr.group(2))
         if op == "+":
