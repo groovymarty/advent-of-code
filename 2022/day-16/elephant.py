@@ -29,22 +29,6 @@ class Valve:
             for neighbor in self.neighbors:
                 neighbor.search_transit_cost(cost + 1)
 
-    def search_best_score(self, time_left, score_so_far, state):
-        result = score_so_far
-        if time_left > 0 and not self.visited:
-            self.visited = True
-            state += self.name + ","
-            # print(state, score_so_far)
-            if self.flow_rate != 0:
-                time_left -= 1
-                score_so_far += self.flow_rate * time_left
-                result = score_so_far
-            for valve, transit_cost in zip(working_valves, self.transit_costs):
-                if transit_cost != 0:
-                    result = max(result, valve.search_best_score(time_left - transit_cost, score_so_far, state))
-            self.visited = False
-        return result
-
 
 def clear_all_visited():
     for valve in valves:
