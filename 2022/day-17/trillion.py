@@ -319,6 +319,7 @@ delta = 0
 print(f"{n_cycles} (+{delta}), {max_tower_h}")
 last_print_n_cycles = n_cycles
 gc_total_h = 0
+gc_start_cycle = 0
 
 while True:
     tower_h1 = tower_h
@@ -342,37 +343,69 @@ while True:
                 break
             # reset grand cycle height
             gc_total_h = 0
+            gc_start_cycle = n_cycles
         else:
             # it was a new unique h
             max_tower_h = max(max_tower_h, tower_h2)
             n_repeats = 0
-            # reset grand cycle height
-            gc_total_h = 0
 
     # copy down tower 2 over tower 1
     copy_down(tower_h1, tower_h2)
     tower_h = tower_h2
 
 print("grand cycle length is", delta, "cycles, height is", gc_total_h)
+n_grand_cycle_cycles = delta
+n_grand_cycle_loops = delta * n_cycle
+
+# we kept track above of cycle that marks our GC starting point,
+# but not necessarily the first such point (remember the loop above goes around some extra times)
+# remove the extra GCs from our starting pont
+gc_start_cycle %= n_grand_cycle_cycles
 
 # lovely that python supports large integer math!
 trillion = 1000000000000
 
-ngc, remainder = divmod(trillion, n_cycle * delta)
-print("remainder is", remainder)
-remainder_h = 0
+# deduct preamble, the initial cycles before the round that marks our GC starting point
+n_preamble_cycles = gc_start_cycle
+print("preamble is", n_preamble_cycles, "cycles")
+how_many_to_do = trillion - (n_preamble_cycles * n_cycle)
 
-# do cycles until no more remainder
-while remainder > 0:
+# divide out the grand cycles
+ngc, remainder = divmod(how_many_to_do, n_grand_cycle_loops)
+print("remainder is", remainder, "loops")
+
+# start over, do preamble then remainder
+for i in range(0, len(mem)):
+    mem[i] = 0
+tower_h = 0
+jet_iter = generate_jets()
+shape_iter = generate_shapes()
+
+if n_preamble_cycles > 0:
+    n_loops = n_cycle
+    n_preamble_cycles -= 1
+else:
     n_loops = min(remainder, n_cycle)
+    remainder -= n_loops
+
+play_loops(n_loops)
+extra_h = tower_h
+
+while n_preamble_cycles > 0 or remainder > 0:
+    print(n_preamble_cycles, remainder, extra_h)
+    if n_preamble_cycles > 0:
+        n_loops = n_cycle
+        n_preamble_cycles -= 1
+    else:
+        n_loops = min(remainder, n_cycle)
+        remainder -= n_loops
     tower_h1 = tower_h
     play_loops(n_loops)
     tower_h2 = tower_h - tower_h1
-    remainder_h += tower_h2
+    extra_h += tower_h2
 
     copy_down(tower_h1, tower_h2)
     tower_h = tower_h2
-    remainder -= n_loops
 
-print("remainder height is", remainder_h)
-print((ngc * gc_total_h) + remainder_h)
+print("extra height is", extra_h)
+print((ngc * gc_total_h) + extra_h)
