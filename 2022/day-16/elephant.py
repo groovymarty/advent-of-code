@@ -35,7 +35,7 @@ def clear_all_visited():
         valve.visited = False
 
 
-with open('input.txt') as f:
+with open('example.txt') as f:
     lines = f.readlines()
     lines = [line.strip() for line in lines]
     for line in lines:
@@ -121,9 +121,14 @@ while True:
     if el_delay == 0:
         while el_index < len(working_valves):
             if not is_visited(el_index) and el_pos.transit_costs[el_index] + 1 <= time_left:
-                # push stack
-                stack.append((my_pos, my_delay, my_index, el_pos, el_delay, el_index + 1,
-                              time_left, score_so_far, visited, path))
+                if found_move:
+                    tmp = list(stack.pop())
+                    tmp[5] = el_index + 1
+                    stack.append(tmp)
+                else:
+                    # push stack
+                    stack.append((my_pos, my_delay, my_index, el_pos, el_delay, el_index + 1,
+                                  time_left, score_so_far, visited, path))
                 # elephant's move
                 el_delay = el_pos.transit_costs[el_index] + 1
                 el_pos = working_valves[el_index]
