@@ -50,10 +50,13 @@ resources = None
 robots = None
 time_to_play = 24
 time_left = 0
+guess_vector = 0
+guess_vector_length = 18
+guess_bits_left = 0
 
 
 def set_initial_state():
-    global resources, robots, time_left
+    global resources, robots, time_left, guesses
     resources = (0, 0, 0, 0)
     robots = [1, 0, 0, 0]
     time_left = time_to_play
@@ -67,8 +70,12 @@ class TimeIsUp(Exception):
     pass
 
 
+class OutOfGuesses(Exception):
+    pass
+
+
 def make_resources(resources_wanted, path):
-    global resources, robots, time_left
+    global resources, robots, time_left, guess_vector, guess_bits_left
     path += f"make_resources{resources_wanted}: "
     # make any required robots
     for i in range(0, 4):
@@ -79,16 +86,36 @@ def make_resources(resources_wanted, path):
         if time_left <= 0:
             raise TimeIsUp
         # what additional robots can I make with resources on hand?
-        can_make = tuple(i for i in range(0, 4) if all(cost <= have for cost, have in zip(blueprint[i], resources)))
-        print(f"  min {get_minute()}: {path}{resources} {robots} can make {get_names(can_make)}")
-        # degree of freedom is here.. need to search for best answer...
+        # don't bother making low-value robots at end of game
+        can_make = tuple(i for i in range(0, 4) if all(cost <= have for cost, have in zip(blueprint[i], resources)) and (time_left > [4, 2, 0, 0][i]))
+        # print(f"  min {get_minute()}: {path}{resources} {robots} can make {get_names(can_make)}")
+        # always make geode robot if possible
         make_me = None
         if GEODE in can_make:
             make_me = GEODE
-        elif OBSIDIAN in can_make and robots[OBSIDIAN] < 2:
-            make_me = OBSIDIAN
-        elif CLAY in can_make and robots[CLAY] < (3 if robots[OBSIDIAN] == 0 else 4):
-            make_me = CLAY
+        elif len(can_make) > 0:
+            # always make robot for which there is great need
+            great_need = sorted((robot for robot in can_make if resources_wanted[robot] > robots[robot] * 5), reverse=True)
+            if len(great_need) > 0:
+                # print(f"  min {get_minute()}: {path}{resources} {robots} great need {get_names(great_need)}")
+                make_me = great_need[0]
+            else:
+                if len(can_make) == 1:
+                    # consume one guess bit
+                    guess_mask = 1
+                    guess_shift = 1
+                else:
+                    # consume two guess bits
+                    guess_mask = 3
+                    guess_shift = 2
+                # print(f"  min {get_minute()}: {path}{resources} {robots} consuming {guess_shift} of {guess_bits_left}")
+                if guess_shift > guess_bits_left:
+                    raise OutOfGuesses
+                guess = guess_vector & guess_mask
+                guess_vector >>= guess_shift
+                guess_bits_left -= guess_shift
+                if guess < len(can_make):
+                    make_me = can_make[guess]
         if make_me:
             make_robot(make_me, path)
         else:
@@ -104,16 +131,22 @@ def make_robot(robot_wanted, path):
     make_resources(robot_cost, path)
     if time_left <= 0:
         raise TimeIsUp
-    print(f"  min {get_minute()}: {path}{resources} {robots} making {resource_names[robot_wanted]}")
+    # print(f"  min {get_minute()}: {path}{resources} {robots} making {resource_names[robot_wanted]}")
     resources = tuple(have - cost + more for have, cost, more in zip(resources, robot_cost, robots))
     robots[robot_wanted] += 1
     time_left -= 1
 
 
 for i, blueprint in enumerate(blueprints):
-    set_initial_state()
-    try:
-        make_resources((0, 0, 0, 999), "")
-    except TimeIsUp:
-        pass
-    print(f"{i + 1}: resources: {resources}, robots: {robots}")
+    max_geodes = 0
+    for guess_vector in range(0, 1 << guess_vector_length):
+        #if guess_vector & 0x3ff == 0:
+        #    print(guess_vector >> 10)
+        guess_bits_left = guess_vector_length
+        set_initial_state()
+        try:
+            make_resources((0, 0, 0, 999), "")
+        except TimeIsUp:
+            pass
+        max_geodes = max(max_geodes, resources[GEODE])
+    print(f"{i+1}: {max_geodes}")
