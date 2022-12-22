@@ -41,35 +41,46 @@ for i, blueprint in enumerate(blueprints):
     print(f"{i + 1}: {blueprint}")
 
 
-def minute(time_left):
-    return 25 - time_left
-
-
-def can_make_robots(blueprint, resources):
-    return tuple(i for i in range(0, 4) if all(cost <= have for cost, have in zip(blueprint[i], resources)))
-
-
 def get_names(these):
     return ", ".join(resource_names[this] for this in these)
 
 
-def make_resources(blueprint, resources_wanted, state, path):
-    resources, robots, time_left = state
+blueprint = None
+resources = None
+robots = None
+time_to_play = 24
+time_left = 0
+
+
+def set_initial_state():
+    global resources, robots, time_left
+    resources = (0, 0, 0, 0)
+    robots = [1, 0, 0, 0]
+    time_left = time_to_play
+
+
+def get_minute():
+    return time_to_play - time_left + 1
+
+
+class TimeIsUp(Exception):
+    pass
+
+
+def make_resources(resources_wanted, path):
+    global resources, robots, time_left
     path += f"make_resources{resources_wanted}: "
     # make any required robots
     for i in range(0, 4):
         if resources_wanted[i] != 0 and robots[i] == 0:
-            state = make_robot(blueprint, i, state, path)
-            if state is None:
-                return None
-            resources, robots, time_left = state
+            make_robot(i, path)
     # wait for resources to accumulate
     while any(have < wanted for have, wanted in zip(resources, resources_wanted)):
         if time_left <= 0:
-            return (resources, robots, time_left) if 999 in resources_wanted else None
-        # what robots can I make with total resources on hand?
-        can_make = can_make_robots(blueprint, resources)
-        print(f"  min {minute(time_left)}: {path}{resources} {robots} can make {get_names(can_make)}")
+            raise TimeIsUp
+        # what additional robots can I make with resources on hand?
+        can_make = tuple(i for i in range(0, 4) if all(cost <= have for cost, have in zip(blueprint[i], resources)))
+        print(f"  min {get_minute()}: {path}{resources} {robots} can make {get_names(can_make)}")
         # degree of freedom is here.. need to search for best answer...
         make_me = None
         if GEODE in can_make:
@@ -79,41 +90,30 @@ def make_resources(blueprint, resources_wanted, state, path):
         elif CLAY in can_make and robots[CLAY] < (3 if robots[OBSIDIAN] == 0 else 4):
             make_me = CLAY
         if make_me:
-            state = (resources, robots, time_left)
-            state = make_robot(blueprint, make_me, state, path)
-            if state is None:
-                raise IndexError("Failed to make robot even though required resources were available!")
-            resources, robots, time_left = state
+            make_robot(make_me, path)
         else:
             # let the robots work for a minute
             resources = tuple(have + more for have, more in zip(resources, robots))
             time_left -= 1
-    return resources, robots, time_left
 
 
-def make_robot(blueprint, robot_wanted, state, path):
+def make_robot(robot_wanted, path):
+    global resources, robots, time_left
     path += f"make_robot({robot_wanted}): "
     robot_cost = blueprint[robot_wanted]
-    state = make_resources(blueprint, robot_cost, state, path)
-    if state is None:
-        return None
-    resources, robots, time_left = state
+    make_resources(robot_cost, path)
     if time_left <= 0:
-        return None
-    print(f"  min {minute(time_left)}: {path}{resources} {robots} making {resource_names[robot_wanted]}")
+        raise TimeIsUp
+    print(f"  min {get_minute()}: {path}{resources} {robots} making {resource_names[robot_wanted]}")
     resources = tuple(have - cost + more for have, cost, more in zip(resources, robot_cost, robots))
-    robots = list(robots)
     robots[robot_wanted] += 1
     time_left -= 1
-    return resources, robots, time_left
 
-
-initial_state = ([0, 0, 0, 0], [1, 0, 0, 0], 24)
 
 for i, blueprint in enumerate(blueprints):
-    state = make_resources(blueprint, (0, 0, 0, 999), initial_state, "")
-    if state is None:
-        print(f"{i + 1}: None")
-    else:
-        resources, robots, time_left = state
-        print(f"{i + 1}: resources: {resources}, robots: {robots}, time left: {time_left}")
+    set_initial_state()
+    try:
+        make_resources((0, 0, 0, 999), "")
+    except TimeIsUp:
+        pass
+    print(f"{i + 1}: resources: {resources}, robots: {robots}")
