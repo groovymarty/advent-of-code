@@ -59,21 +59,17 @@ def make_resources(blueprint, resources_wanted, state, path):
     # make any required robots
     for i in range(0, 4):
         if resources_wanted[i] != 0 and robots[i] == 0:
-            # must have this robot so ok to consume resources in hand
-            state = make_robot(blueprint, i, (0, 0, 0, 0), state, path)
+            state = make_robot(blueprint, i, state, path)
             if state is None:
                 return None
             resources, robots, time_left = state
     # wait for resources to accumulate
     while any(have < wanted for have, wanted in zip(resources, resources_wanted)):
         if time_left <= 0:
-            return None
+            return (resources, robots, time_left) if 999 in resources_wanted else None
         # what robots can I make with total resources on hand?
         can_make = can_make_robots(blueprint, resources)
-        # what robots can I make with extra resources on hand?
-        extra_resources = tuple(max(0, have - committed) for have, committed in zip(resources, resources_wanted))
-        can_make_extra = can_make_robots(blueprint, extra_resources)
-        print(f"  min {minute(time_left)}: {path}{resources} {robots} can make {get_names(can_make)}, extra: {get_names(can_make_extra)}")
+        print(f"  min {minute(time_left)}: {path}{resources} {robots} can make {get_names(can_make)}")
         # degree of freedom is here.. need to search for best answer...
         make_me = None
         if GEODE in can_make:
@@ -84,7 +80,7 @@ def make_resources(blueprint, resources_wanted, state, path):
             make_me = CLAY
         if make_me:
             state = (resources, robots, time_left)
-            state = make_robot(blueprint, make_me, (0, 0, 0, 0), state, path)
+            state = make_robot(blueprint, make_me, state, path)
             if state is None:
                 raise IndexError("Failed to make robot even though required resources were available!")
             resources, robots, time_left = state
@@ -95,11 +91,10 @@ def make_resources(blueprint, resources_wanted, state, path):
     return resources, robots, time_left
 
 
-def make_robot(blueprint, robot_wanted, resources_committed, state, path):
+def make_robot(blueprint, robot_wanted, state, path):
     path += f"make_robot({robot_wanted}): "
     robot_cost = blueprint[robot_wanted]
-    resources_wanted = tuple(cost + committed for cost, committed in zip(robot_cost, resources_committed))
-    state = make_resources(blueprint, resources_wanted, state, path)
+    state = make_resources(blueprint, robot_cost, state, path)
     if state is None:
         return None
     resources, robots, time_left = state
@@ -116,7 +111,7 @@ def make_robot(blueprint, robot_wanted, resources_committed, state, path):
 initial_state = ([0, 0, 0, 0], [1, 0, 0, 0], 24)
 
 for i, blueprint in enumerate(blueprints):
-    state = make_resources(blueprint, (0, 0, 0, 9 if i == 0 else 12), initial_state, "")
+    state = make_resources(blueprint, (0, 0, 0, 999), initial_state, "")
     if state is None:
         print(f"{i + 1}: None")
     else:
