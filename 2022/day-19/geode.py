@@ -8,6 +8,10 @@ GEODE = 3
 resource_names = ["ore", "clay", "obsidian", "geode"]
 resource_map = {"ore": ORE, "clay": CLAY, "obsidian": OBSIDIAN, "geode": GEODE}
 blueprints = []
+blueprint = None
+time_to_play = 24
+max_geode_time_left = 0
+max_obsidian_time_left = 0
 
 with open('example.txt') as f:
     lines = f.readlines()
@@ -45,108 +49,96 @@ def get_names(these):
     return ", ".join(resource_names[this] for this in these)
 
 
-blueprint = None
-resources = None
-robots = None
-time_to_play = 24
-time_left = 0
-guess_vector = 0
-guess_vector_length = 18
-guess_bits_left = 0
-
-
-def set_initial_state():
-    global resources, robots, time_left, guesses
-    resources = (0, 0, 0, 0)
-    robots = [1, 0, 0, 0]
-    time_left = time_to_play
-
-
-def get_minute():
-    return time_to_play - time_left + 1
-
-
-class TimeIsUp(Exception):
-    pass
-
-
-class OutOfGuesses(Exception):
-    pass
-
-
-def make_resources(resources_wanted, path):
-    global resources, robots, time_left, guess_vector, guess_bits_left
-    path += f"make_resources{resources_wanted}: "
-    # make any required robots
-    for i in range(0, 4):
-        if resources_wanted[i] != 0 and robots[i] == 0:
-            make_robot(i, path)
-    # wait for resources to accumulate
-    while any(have < wanted for have, wanted in zip(resources, resources_wanted)):
-        if time_left <= 0:
-            raise TimeIsUp
-        # what additional robots can I make with resources on hand?
-        # don't bother making low-value robots at end of game
-        can_make = tuple(i for i in range(0, 4) if all(cost <= have for cost, have in zip(blueprint[i], resources)) and (time_left > [4, 2, 0, 0][i]))
-        # print(f"  min {get_minute()}: {path}{resources} {robots} can make {get_names(can_make)}")
-        # always make geode robot if possible
-        make_me = None
-        if GEODE in can_make:
-            make_me = GEODE
-        elif len(can_make) > 0:
-            # always make robot for which there is great need
-            great_need = sorted((robot for robot in can_make if resources_wanted[robot] > robots[robot] * 5), reverse=True)
-            if len(great_need) > 0:
-                # print(f"  min {get_minute()}: {path}{resources} {robots} great need {get_names(great_need)}")
-                make_me = great_need[0]
-            else:
-                if len(can_make) == 1:
-                    # consume one guess bit
-                    guess_mask = 1
-                    guess_shift = 1
-                else:
-                    # consume two guess bits
-                    guess_mask = 3
-                    guess_shift = 2
-                # print(f"  min {get_minute()}: {path}{resources} {robots} consuming {guess_shift} of {guess_bits_left}")
-                if guess_shift > guess_bits_left:
-                    raise OutOfGuesses
-                guess = guess_vector & guess_mask
-                guess_vector >>= guess_shift
-                guess_bits_left -= guess_shift
-                if guess < len(can_make):
-                    make_me = can_make[guess]
-        if make_me:
-            make_robot(make_me, path)
+class State:
+    def __init__(self, other=None):
+        if other:
+            self.resources = other.resources
+            self.robots = other.robots
+            self.path = other.path
+            self.time_left = other.time_left
         else:
-            # let the robots work for a minute
-            resources = tuple(have + more for have, more in zip(resources, robots))
-            time_left -= 1
+            self.resources = None
+            self.robots = None
+            self.path = ""
+            self.time_left = 0
+
+    def set_initial_state(self):
+        self.resources = (0, 0, 0, 0)
+        self.robots = (1, 0, 0, 0)
+        self.path = ""
+        self.time_left = time_to_play
+
+    def can_make_robot(self, robot):
+        return all(have >= need for have, need in zip(self.resources, blueprint[robot]))
+
+    def make_robot(self, robot):
+        self.resources = tuple(have - cost + more for have, cost, more in zip(self.resources, blueprint[robot], self.robots))
+        my_robots = list(self.robots)
+        my_robots[robot] += 1
+        self.robots = tuple(my_robots)
+        self.path += f"{resource_names[robot]},"
+        self.time_left -= 1
+
+    def pass_time(self):
+        self.resources = tuple(have + more for have, more in zip(self.resources, self.robots))
+        self.path += ","
+        self.time_left -= 1
+
+    def evaluate(self):
+        return self.resources[GEODE]
+
+    def get_minute(self):
+        return time_to_play - self.time_left + 1
 
 
-def make_robot(robot_wanted, path):
-    global resources, robots, time_left
-    path += f"make_robot({robot_wanted}): "
-    robot_cost = blueprint[robot_wanted]
-    make_resources(robot_cost, path)
-    if time_left <= 0:
-        raise TimeIsUp
-    # print(f"  min {get_minute()}: {path}{resources} {robots} making {resource_names[robot_wanted]}")
-    resources = tuple(have - cost + more for have, cost, more in zip(resources, robot_cost, robots))
-    robots[robot_wanted] += 1
-    time_left -= 1
+def play(state):
+    global max_geode_time_left, max_obsidian_time_left
+    best_result = state
+    if state.time_left > 0 and \
+            (state.robots[GEODE] > 0 or state.time_left >= max_geode_time_left) and \
+            (state.robots[OBSIDIAN] > 0 or state.time_left >= max_obsidian_time_left):
+        #print(f"{state.get_minute()}: {state.path}")
+        best_score = -1
+        # try making each type of robot, higher-value robots first
+        for robot in range(GEODE, -1, -1):
+            if state.can_make_robot(robot):
+                # keep track of earliest point in time when a geode robot was made
+                if robot == GEODE and state.time_left > max_geode_time_left:
+                    max_geode_time_left = state.time_left
+                    print("made geode robot", max_geode_time_left)
+                # keep track of earliest point in time when an obsidian robot was made
+                if robot == OBSIDIAN and state.time_left > max_obsidian_time_left:
+                    max_obsidian_time_left = state.time_left
+                    print("made obsidian robot", max_obsidian_time_left)
+                try_state = State(state)
+                try_state.make_robot(robot)
+                result = play(try_state)
+                if robot == GEODE:
+                    # no way to improve on making a geode robot when possible
+                    return result
+                result_score = result.evaluate()
+                if result_score > best_score:
+                    best_score = result_score
+                    best_result = result
+        # also try letting time pass without making a robot
+        try_state = State(state)
+        try_state.pass_time()
+        result = play(try_state)
+        result_score = result.evaluate()
+        if result_score > best_score:
+            best_result = result
+    return best_result
 
 
+quality_total = 0
 for i, blueprint in enumerate(blueprints):
-    max_geodes = 0
-    for guess_vector in range(0, 1 << guess_vector_length):
-        #if guess_vector & 0x3ff == 0:
-        #    print(guess_vector >> 10)
-        guess_bits_left = guess_vector_length
-        set_initial_state()
-        try:
-            make_resources((0, 0, 0, 999), "")
-        except TimeIsUp:
-            pass
-        max_geodes = max(max_geodes, resources[GEODE])
-    print(f"{i+1}: {max_geodes}")
+    print(f"doing blueprint {i+1}:")
+    state = State()
+    state.set_initial_state()
+    max_obsidian_time_left = 0
+    max_geode_time_left = 0
+    result = play(state)
+    print("got", result.evaluate())
+    quality_total += result.evaluate() * (i + 1)
+
+print(quality_total)
