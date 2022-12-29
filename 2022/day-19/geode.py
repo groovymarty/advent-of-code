@@ -9,11 +9,16 @@ resource_names = ["ore", "clay", "obsidian", "geode"]
 resource_map = {"ore": ORE, "clay": CLAY, "obsidian": OBSIDIAN, "geode": GEODE}
 blueprints = []
 blueprint = None
+obsidian_needed = 0
 time_to_play = 24
+much_time_left = 0
 max_geode_time_left = 0
-max_obsidian_time_left = 0
+projected_resource = [t for t in range(0, time_to_play)]
+for t in range(1, time_to_play):
+    projected_resource[t] += projected_resource[t-1]
+print(projected_resource)
 
-with open('example.txt') as f:
+with open('input.txt') as f:
     lines = f.readlines()
     for line in lines:
         phrases = line.strip().split(".")
@@ -90,26 +95,28 @@ class State:
     def get_minute(self):
         return time_to_play - self.time_left + 1
 
+    def projected_obsidian(self):
+        return 999
+        t = max(self.time_left - 1, 0)
+        return self.resources[OBSIDIAN] + (self.robots[OBSIDIAN] * t) + projected_resource[t]
+
 
 def play(state):
     global max_geode_time_left, max_obsidian_time_left
     best_result = state
-    if state.time_left > 0 and \
-            (state.robots[GEODE] > 0 or state.time_left >= max_geode_time_left) and \
-            (state.robots[OBSIDIAN] > 0 or state.time_left >= max_obsidian_time_left):
+    if state.time_left > 1 and \
+        (state.robots[GEODE] or \
+            (state.time_left >= max_geode_time_left)):
         #print(f"{state.get_minute()}: {state.path}")
         best_score = -1
         # try making each type of robot, higher-value robots first
+        # only make ore robots early in the game
         for robot in range(GEODE, -1, -1):
-            if state.can_make_robot(robot):
+            if state.robots[robot] < 10 and state.can_make_robot(robot):
                 # keep track of earliest point in time when a geode robot was made
                 if robot == GEODE and state.time_left > max_geode_time_left:
                     max_geode_time_left = state.time_left
                     print("made geode robot", max_geode_time_left)
-                # keep track of earliest point in time when an obsidian robot was made
-                if robot == OBSIDIAN and state.time_left > max_obsidian_time_left:
-                    max_obsidian_time_left = state.time_left
-                    print("made obsidian robot", max_obsidian_time_left)
                 try_state = State(state)
                 try_state.make_robot(robot)
                 result = play(try_state)
@@ -120,22 +127,26 @@ def play(state):
                 if result_score > best_score:
                     best_score = result_score
                     best_result = result
-        # also try letting time pass without making a robot
-        try_state = State(state)
-        try_state.pass_time()
-        result = play(try_state)
-        result_score = result.evaluate()
-        if result_score > best_score:
-            best_result = result
+        # also try letting time pass without making a robot (only early in game or unable to make any robots)
+        if best_score == -1 or state.time_left >= much_time_left:
+            try_state = State(state)
+            try_state.pass_time()
+            result = play(try_state)
+            result_score = result.evaluate()
+            if result_score > best_score:
+                best_result = result
+    elif state.time_left == 1:
+        # no point making any robots in last minute
+        best_result.pass_time()
     return best_result
 
 
 quality_total = 0
 for i, blueprint in enumerate(blueprints):
     print(f"doing blueprint {i+1}:")
+    obsidian_needed = blueprint[GEODE][OBSIDIAN]
     state = State()
     state.set_initial_state()
-    max_obsidian_time_left = 0
     max_geode_time_left = 0
     result = play(state)
     print("got", result.evaluate())
