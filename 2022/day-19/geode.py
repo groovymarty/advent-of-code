@@ -11,11 +11,10 @@ blueprints = []
 blueprint = None
 obsidian_needed = 0
 time_to_play = 24
-much_time_left = 0
 max_geode_time_left = 0
-projected_resource = [t for t in range(0, time_to_play)]
-for t in range(1, time_to_play):
-    projected_resource[t] += projected_resource[t-1]
+projected_resource = [0] + [t for t in range(0, time_to_play)]
+for i in range(1, len(projected_resource)):
+    projected_resource[i] += projected_resource[i-1]
 print(projected_resource)
 
 with open('input.txt') as f:
@@ -95,49 +94,50 @@ class State:
     def get_minute(self):
         return time_to_play - self.time_left + 1
 
-    def projected_obsidian(self):
-        return 999
-        t = max(self.time_left - 1, 0)
+    def projected_obsidian(self, t):
+        t = max(t, 0)
         return self.resources[OBSIDIAN] + (self.robots[OBSIDIAN] * t) + projected_resource[t]
 
 
 def play(state):
-    global max_geode_time_left, max_obsidian_time_left
+    global max_geode_time_left
     best_result = state
+    best_score = -1
+    # must have at least 2 minutes left or no point making robots
+    # if we don't have a geode robot in this state, don't bother going forward in time
+    # any farther than the point in time when we successfully made one on another path.
+    # also don't go any farther if it's impossible to make enough obsidian to make the first geode robot
     if state.time_left > 1 and \
-        (state.robots[GEODE] or \
-            (state.time_left >= max_geode_time_left)):
-        #print(f"{state.get_minute()}: {state.path}")
-        best_score = -1
+        (state.robots[GEODE] or
+            (state.time_left >= max_geode_time_left and
+             state.projected_obsidian(state.time_left - 2) >= obsidian_needed)):
+        # print(f"{state.get_minute()}: {state.path}")
         # try making each type of robot, higher-value robots first
-        # only make ore robots early in the game
         for robot in range(GEODE, -1, -1):
-            if state.robots[robot] < 10 and state.can_make_robot(robot):
+            if state.can_make_robot(robot):
                 # keep track of earliest point in time when a geode robot was made
-                if robot == GEODE and state.time_left > max_geode_time_left:
+                if robot == GEODE and state.time_left >= max_geode_time_left:
                     max_geode_time_left = state.time_left
-                    print("made geode robot", max_geode_time_left)
+                    print(f"{state.get_minute()}: {state.path} making geode robot")
                 try_state = State(state)
                 try_state.make_robot(robot)
                 result = play(try_state)
                 if robot == GEODE:
-                    # no way to improve on making a geode robot when possible
+                    # no way to improve on making a geode robot when it is possible to make one
                     return result
                 result_score = result.evaluate()
                 if result_score > best_score:
                     best_score = result_score
                     best_result = result
-        # also try letting time pass without making a robot (only early in game or unable to make any robots)
-        if best_score == -1 or state.time_left >= much_time_left:
-            try_state = State(state)
-            try_state.pass_time()
-            result = play(try_state)
-            result_score = result.evaluate()
-            if result_score > best_score:
-                best_result = result
-    elif state.time_left == 1:
-        # no point making any robots in last minute
-        best_result.pass_time()
+
+    # also try letting time pass without making a robot
+    if state.time_left > 0:
+        try_state = State(state)
+        try_state.pass_time()
+        result = play(try_state)
+        result_score = result.evaluate()
+        if result_score > best_score:
+            best_result = result
     return best_result
 
 
