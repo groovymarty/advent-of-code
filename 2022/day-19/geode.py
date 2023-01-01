@@ -9,8 +9,10 @@ resource_names = ["ore", "clay", "obsidian", "geode"]
 resource_map = {"ore": ORE, "clay": CLAY, "obsidian": OBSIDIAN, "geode": GEODE}
 blueprints = []
 blueprint = None
+blueprint_num = 0
 obsidian_needed = 0
-time_to_play = 24
+time_to_play = 24 #32
+max_blueprints = 999 #3
 max_geode_time_left = 0
 projected_resource = [0] + [t for t in range(0, time_to_play)]
 for i in range(1, len(projected_resource)):
@@ -106,11 +108,10 @@ def play(state):
     # must have at least 2 minutes left or no point making robots
     # if we don't have a geode robot in this state, don't bother going forward in time
     # any farther than the point in time when we successfully made one on another path.
-    # also don't go any farther if it's impossible to make enough obsidian to make the first geode robot
+    # also don't go any farther if it's impossible to make enough obsidian to make another geode robot
     if state.time_left > 1 and \
-        (state.robots[GEODE] or
-            (state.time_left >= max_geode_time_left and
-             state.projected_obsidian(state.time_left - 2) >= obsidian_needed)):
+        (state.robots[GEODE] or state.time_left >= max_geode_time_left) and \
+        (state.projected_obsidian(state.time_left - 2) >= obsidian_needed):
         # print(f"{state.get_minute()}: {state.path}")
         # try making each type of robot, higher-value robots first
         for robot in range(GEODE, -1, -1):
@@ -118,7 +119,7 @@ def play(state):
                 # keep track of earliest point in time when a geode robot was made
                 if robot == GEODE and state.time_left >= max_geode_time_left:
                     max_geode_time_left = state.time_left
-                    print(f"{state.get_minute()}: {state.path} making geode robot")
+                    print(f"[{blueprint_num}] {state.get_minute()}: {state.path} making geode robot")
                 try_state = State(state)
                 try_state.make_robot(robot)
                 result = play(try_state)
@@ -141,15 +142,25 @@ def play(state):
     return best_result
 
 
+results = []
+max_geode_time_lefts = []
 quality_total = 0
-for i, blueprint in enumerate(blueprints):
-    print(f"doing blueprint {i+1}:")
+product = 1
+for i, blueprint in enumerate(blueprints[0: max_blueprints]):
+    blueprint_num = i + 1
+    print(f"doing blueprint {blueprint_num}:")
     obsidian_needed = blueprint[GEODE][OBSIDIAN]
     state = State()
     state.set_initial_state()
     max_geode_time_left = 0
     result = play(state)
+    results.append(result)
+    max_geode_time_lefts.append(max_geode_time_left)
     print("got", result.evaluate())
     quality_total += result.evaluate() * (i + 1)
+    product *= result.evaluate()
 
-print(quality_total)
+print("geodes", [result.resources[GEODE] for result in results])
+print("m_g_t_l", max_geode_time_lefts)
+print("quality", quality_total)
+print("product", product)
