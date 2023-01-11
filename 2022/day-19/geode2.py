@@ -17,7 +17,7 @@ for i in range(1, len(projected_resource)):
     projected_resource[i] += projected_resource[i-1]
 print(projected_resource)
 
-with open('input.txt') as f:
+with open('example.txt') as f:
     lines = f.readlines()
     for line in lines:
         phrases = line.strip().split(".")
@@ -98,19 +98,29 @@ class State:
         t = max(t, 0)
         return self.resources[OBSIDIAN] + (self.robots[OBSIDIAN] * t) + projected_resource[t]
 
+    def is_possible_to_make_geode_robot(self):
+        resources = self.resources
+        robots = self.robots
+        for t in range(self.time_left, 0, -1):
+            # for each robot type, see if we have the resources to make a robot of that type
+            can_make_robot = tuple(all(have >= need for have, need in zip(resources, cost)) for cost in blueprint)
+            # return true if we can a geode robot
+            if can_make_robot[GEODE]:
+                return True
+            # make new resources with existing robots
+            resources = tuple(have + more for have, more in zip(resources, robots))
+            # make new robots (without consuming any resources)
+            robots = tuple(n + 1 if can_make else 0 for n, can_make in zip(robots, can_make_robot))
+        return False
+
 
 def play(state):
     global max_geode_time_left
     best_result = state
     best_score = -1
-    fred = False
-    # must have at least 2 minutes left or no point making robots
-    # if we don't have a geode robot in this state, don't bother going forward in time
-    # any farther than the point in time when we successfully made one on another path.
-    # also don't go any farther if it's impossible to make enough obsidian to make another geode robot
-    if state.time_left > 1 and \
-            (state.robots[GEODE] or state.time_left + 1 >= max_geode_time_left) and \
-            (state.projected_obsidian(state.time_left - 2) >= obsidian_needed):
+    # must have at least 2 minutes left or no point making any robots
+    # also no point in making robots if it's impossible to make a geode robot in the time remaining
+    if state.time_left > 1 and state.is_possible_to_make_geode_robot():
         # print(f"{state.get_minute()}: {state.path}")
         # try making each type of robot, higher-value robots first
         for robot in range(GEODE, -1, -1):
@@ -122,19 +132,13 @@ def play(state):
                 try_state = State(state)
                 try_state.make_robot(robot)
                 result = play(try_state)
-                if robot == GEODE:
-                    # no way to improve on making a geode robot when it is possible to make one
-                    fred = True
-                    # return result
                 result_score = result.evaluate()
                 if result_score > best_score:
                     best_score = result_score
                     best_result = result
-            if fred and robot == OBSIDIAN:
-                break
 
     # also try letting time pass without making a robot
-    if state.time_left > 0 and not fred:
+    if state.time_left > 0:
         try_state = State(state)
         try_state.pass_time()
         result = play(try_state)
